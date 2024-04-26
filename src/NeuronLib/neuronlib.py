@@ -1,6 +1,9 @@
 from linalgebralib import LinAlgebraLib as la
 import math
 import random
+import csv
+import string
+import statistics
 import matplotlib.pyplot as plt
 
 class Network():
@@ -17,14 +20,30 @@ class Network():
                 raise TypeError
             else:
                 v = la.Matrix(content=[[i] for i in input])
+                for w,b in zip(self.weights, self.biases):
+                    v = w*v + b
+                    v = la.Matrix(content=[[activation(i[0])] for i in v.contents])
+                return v
+                """
                 for w,b in zip(self.weights[:-1], self.biases[:-1]):
                     v = w*v + b
                     v = la.Matrix(content=[[activation(i[0])] for i in v.contents])
                 return self.weights[-1]*v + self.biases[-1]
+                """
+                
         except TypeError:
             raise TypeError("Invalid input. Must pass data to the network as a list corresponding to the number of neurons in the input layer.")
         
-    def backprop(self, input, output, last_layer_activation=False):
+    def save(self):
+        save_file = open('networkdata.txt', 'w')
+        save_file.write("Weights:\n\n")
+        for weight in self.weights:
+            save_file.write(str(weight) + "\n\n")
+        save_file.write("Biases:\n\n")
+        for bias in self.biases:
+            save_file.write(str(bias) + "\n\n")
+        
+    def backprop(self, input, output, last_layer_activation=True):
         try:
             if len(input) != self.weights[0].columns or self.weights[-1].rows != len(output):
                 raise TypeError
@@ -125,18 +144,139 @@ class Network():
 
 #Function for mapping neuron inputs to values between 0 and 1.
 def activation(n):
-    if n <= 0:
-        return 0.01*n
-    else:
-        return (n)
-def activation_prime(n):
-    if n <= 0:
-        return 0.01
-    else:
+    if n < -500:
+        return 0
+    elif n > 500:
         return 1
+    else:
+        return 1 / (1 + math.e**(-n))
+    
+def activation_prime(n):
+    return activation(n)*(1-activation(n))
 
-net = Network([1, 10, 1])
+def import_spanish_songs(path):
+    db = []
+    chars = list(string.ascii_lowercase + 'ñáéíóúü ')
+    possible_chars = {chars[i]:i for i in range(len(chars))}
+    with open(path, newline='', encoding='latin1') as f:
+        reader = csv.DictReader(f)
+        n = len(chars)
+        for row in reader:
+            song = row["Title"].lower()
+            encoded_song = la.Matrix(size=(20,n))
+            if len(song) > 20:
+                song = song[:20]
+            for i in range(len(song)):
+                if song[i] in possible_chars:
+                    encoded_song.contents[i][possible_chars[song[i]]] = 1
+            real_encoded_song = []
+            for l in encoded_song.contents:
+                for j in l:
+                    real_encoded_song.append(j)
+            db.append([real_encoded_song, [1,0]])
+    f.close()
+    return db
 
+def import_english_songs(path):
+    db = []
+    chars = list(string.ascii_lowercase + 'ñáéíóúü ')
+    possible_chars = {chars[i]:i for i in range(len(chars))}
+    with open(path, newline='', encoding="latin1") as f:
+        reader = csv.DictReader(f)
+        n = len(chars)
+        for row in reader:
+            song = row["title"].lower()
+            encoded_song = la.Matrix(size=(20,n))
+            if len(song) > 20:
+                song = song[:20]
+            for i in range(len(song)):
+                if song[i] in possible_chars:
+                    encoded_song.contents[i][possible_chars[song[i]]] = 1
+            real_encoded_song = []
+            for l in encoded_song.contents:
+                for j in l:
+                    real_encoded_song.append(j)
+            db.append([real_encoded_song, [0,1]])
+    f.close()
+    return db
+
+def encode_input_song(song):
+    song = song.lower()
+    chars = list(string.ascii_lowercase + 'ñáéíóúü ')
+    n = len(chars)
+    possible_chars = {chars[i]:i for i in range(len(chars))}
+    encoded_song = la.Matrix(size=(20,n))
+    if len(song) > 20:
+        song = song[:20]
+    for i in range(len(song)):
+        if song[i] in possible_chars:
+            encoded_song.contents[i][possible_chars[song[i]]] = 1
+    real_encoded_song = []
+    for l in encoded_song.contents:
+        for j in l:
+            real_encoded_song.append(j)
+    return real_encoded_song
+
+def test_single_output(input, expected_output):
+    tmp = net.result(input)
+    if tmp.contents[0][0] > tmp.contents[1][0]:
+        prediction = [1,0]
+    else:
+        prediction = [0,1]
+    return prediction == expected_output
+
+def test_accuracy(data):
+    results = []
+    for i in data:
+        if test_single_output(i[0], i[1]):
+            results.append(1)
+        else:
+            results.append(0)
+    return(statistics.fmean(results)*100)
+
+
+spanish_data = import_spanish_songs("spanishsongs.csv")
+english_data = import_english_songs("englishsongs.csv")
+
+net = Network([680, 30, 2])
+net.save()
+
+training_data = spanish_data[0:1000] + english_data[0:1000]
+test_data = spanish_data[1000:1100] + english_data[1000:1100]
+
+print(f"Initial network has {test_accuracy(test_data)}% accuracy!")
+
+net.train(data=training_data,threshold=10, batch_size=5, learning_rate=0.05)
+
+net.save()
+
+print(f"Resultant network has {test_accuracy(test_data)}% accuracy!")
+
+print("------Trained Neural Net-------")
+print("Neural net should output something close to the input.")
+while True:
+    n = input("Song title to pass to neural net: ")
+    m = net.result(encode_input_song(n))
+    if m.contents[0][0] > m.contents[1][0]:
+        result = "Spanish"
+    else:
+        result = "English"
+    print(f"Neural net output: {result}")
+
+
+
+
+
+
+
+
+
+#4/18/2024 Implemented neural network object, instantiation method, and method for computing its output. Also implemented a basic activation function (sigmoid).
+
+#TODO: Need to implement training of the neural network through back-propagation and gradient descent.
+#Next need to scrape for some sort of test (Spanish vs. English song titles?) data to test the efficacy of the network. 
+
+"""
 x = [(i/10) for i in range(100)]
 y = [net.result([i/10]).contents[0][0] for i in range(100)]
 
@@ -156,54 +296,17 @@ while True:
             print("Invalid input!")
 
 data = []
-for i in range(200000):
-    n = random.uniform(0,10)
-    data.append([[n],[n**2]])
+for i in range(40000):
+    n = random.uniform(0,100)
+    data.append([[n],[7*n-3.1]])
 
-net.train(data=data,threshold=1, batch_size=64, learning_rate=0.001)
-
-data = []
-for i in range(20000):
-    n = random.uniform(0,10)
-    data.append([[n],[n**2]])
-
-
-net.train(data=data,threshold=1, batch_size=128, learning_rate=0.005)
-
-data = []
-for i in range(20000):
-    n = random.uniform(0,10)
-    data.append([[n],[n**2]])
-
-net.train(data=data,threshold=1, batch_size=256, learning_rate=0.01)
-
-data = []
-for i in range(20000):
-    n = random.uniform(0,10)
-    data.append([[n],[n**2]])
-
-
-net.train(data=data,threshold=1, batch_size=256, learning_rate=0.05)
+------
 
 x = [(i/10) for i in range(100)]
 y = [net.result([i/10]).contents[0][0] for i in range(100)]
 
 plt.scatter(x, y)
+plt.title("7x-3.1", loc="center")
 plt.show()
 
-print("------Trained Neural Net-------")
-print("Neural net should output something close to the input.")
-while True:
-    n = input("Number to pass to neural net: ")
-    n = float(n)
-    print(f"Neural net output: {net.result([n])}")
-    
-
-
-
-
-
-#4/18/2024 Implemented neural network object, instantiation method, and method for computing its output. Also implemented a basic activation function (sigmoid).
-
-#TODO: Need to implement training of the neural network through back-propagation and gradient descent.
-#Next need to scrape for some sort of test (Spanish vs. English song titles?) data to test the efficacy of the network. 
+"""
